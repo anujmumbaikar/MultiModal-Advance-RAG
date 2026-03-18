@@ -2,6 +2,7 @@ import base64
 from openai import OpenAI
 from dotenv import load_dotenv
 from unstructured.documents.elements import Text,Element,FigureCaption,Image,Table,CompositeElement
+from unstructured.partition.pdf import partition_pdf
 load_dotenv()
 
 client = OpenAI()
@@ -85,48 +86,34 @@ def process_tables_with_description(raw_chunks,use_openai=True):
             processed_tables.append(table_data)
     return processed_tables
 
+def process_text_chunks_from_raw(raw_chunks):
+    processed_texts = []
 
-def create_semantic_chunks(text_chunks):
-    processed_texts_chunks = []
-    for idx , chunk in enumerate(text_chunks):
+    for chunk in raw_chunks:
         if isinstance(chunk, CompositeElement):
-            chunk_data = {
+            processed_texts.append({
                 "content": chunk.text,
                 "content_type": "text",
                 "filename": chunk.metadata.filename
-            }
-            processed_texts_chunks.append(chunk_data) 
-    return processed_texts_chunks
+            })
+    return processed_texts
 
 
-if __name__ == "__main__":
-    from unstructured.partition.pdf import partition_pdf
-    file_path = 'OLAP_and_OLTP.pdf'
-
+def get_all_chunks(file_path):
     raw_chunks = partition_pdf(
         filename=file_path,
         strategy="hi_res",
         infer_table_structure=True,
-        extract_image_block_types=["figure", "table",'Image'],
+        extract_image_block_types=["figure", "table", "Image"],
         extract_image_block_to_payload=True,
-        chunking_strategy=None,
-    )
-    # processed_images = process_images_with_caption(raw_chunks)
-    # for image in processed_images:
-    #     print(image)
-    processed_tables = process_tables_with_description(raw_chunks)
-    for table in processed_tables:
-        print(table) 
-
-    
-    text_chunks = partition_pdf(
-        filename=file_path,
-        strategy="hi_res",
         chunking_strategy="by_title",
         max_characters=2000,
         combine_text_under_n_chars=500,
         new_after_n_chars=1500
     )
-    semantic_chunks = create_semantic_chunks(text_chunks)
-    for chunk in semantic_chunks:
-        print(chunk)
+
+    images = process_images_with_caption(raw_chunks)
+    tables = process_tables_with_description(raw_chunks)
+    texts = process_text_chunks_from_raw(raw_chunks)
+
+    return images + tables + texts
