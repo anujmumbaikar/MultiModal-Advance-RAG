@@ -59,13 +59,13 @@ def store_in_qdrant(docs):
     return vector_store
 
 
-if __name__ == "__main__":
-    file_path = "./files/OLAP_and_OLTP.pdf"
+def ingest_file_to_vector_db(file_path):
 
     chunks = get_all_chunks(file_path)
     processed_chunks = prepare_chunks_for_ingestion(chunks)
     docs = convert_to_documents(processed_chunks)
 
-    vector_store = store_in_qdrant(docs)
+    store_in_qdrant(docs)
+    print(f"Ingestion completed for file: {file_path}")
 
     
