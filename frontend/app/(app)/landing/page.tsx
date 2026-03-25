@@ -1,6 +1,3 @@
-"use client";
-
-import * as React from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -16,17 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-const projects = [
-  {
-    id: "1",
-    name: "AI Research Docs",
-    description: "Multimodal RAG knowledge base",
-    status: "active",
-    totalDocuments: 12,
-    totalChunks: 340,
-    domain: "AI",
-  },
-];
+import prisma from "@/lib/db";
 
 const StatusBadge = ({ status }: { status: string }) => (
   <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
@@ -48,7 +35,8 @@ const EmptyState = ({
   </div>
 );
 
-const Landing = () => {
+const Landing = async () => {
+  const projects = await prisma.project.findMany()
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}

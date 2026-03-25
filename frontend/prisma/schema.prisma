@@ -1,0 +1,165 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  domain          String?
+  instructions    String?
+  tags            String[] 
+  status          ProjectStatus
+
+  totalDocuments  Int      @default(0)
+  totalChunks     Int      @default(0)
+  totalPages      Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  documents       Document[]
+  ingestionJobs   IngestionJob[]
+  chatMessages    ChatMessage[]
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name         String
+  fileType     String
+  size         Int
+
+  status       DocumentStatus
+
+  pages        Int?
+  chunks       Int?
+
+  contentTypes String[] // ["text", "table", "image"]
+
+  uploadedAt   DateTime
+  processedAt  DateTime?
+
+  createdAt    DateTime @default(now())
+
+  chunksRel    Chunk[]
+  ingestionJobs IngestionJob[]
+}
+
+model Chunk {
+  id           String   @id @default(cuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  text         String
+  page         Int?
+  contentType  String
+
+  createdAt    DateTime @default(now())
+
+  citations    Citation[]
+}
+
+model IngestionJob {
+  id           String   @id @default(cuid())
+  projectId    String
+  documentId   String?
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document     Document? @relation(fields: [documentId], references: [id])
+
+  currentStage String
+  progress     Int
+
+  createdAt    DateTime @default(now())
+
+  stages       Stage[]
+  logs         Log[]
+}
+
+model Stage {
+  id           String   @id @default(cuid())
+  jobId        String
+  job          IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  stage        String
+  status       StageStatus
+
+  startedAt    DateTime?
+  completedAt  DateTime?
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  timestamp DateTime
+  message   String
+  level     String
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  role       ChatRole
+  content    String
+
+  timestamp  DateTime
+
+  citations  Citation[]
+}
+
+model Citation {
+  id           String   @id @default(cuid())
+  messageId    String
+  chunkId      String
+
+  message      ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  chunk        Chunk       @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  relevanceScore Float?
+  page           Int?
+}
+
+enum ProjectStatus {
+  ready
+  processing
+  idle
+}
+
+enum DocumentStatus {
+  completed
+  processing
+  queued
+}
+
+enum StageStatus {
+  pending
+  running
+  completed
+}
+
+enum ChatRole {
+  user
+  assistant
+}
+//after making schema
+//in order to commit this change ,into our neon database
+// 1.npx prisma migrate dev -> it detects the schema changes,creates a migration file and applies the changes to the database/local database
+// 2.npx prisma generate -> it reads schema.prisma and generate fully typed prisma client . 
+//it provides a type sfae javascript/ts api to interact with DB.

@@ -31,6 +31,7 @@ import {
 
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import axios from "axios";
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -44,42 +45,67 @@ const NAV_ITEMS = [
 export default function ProjectDashboard() {
   const router = useRouter();
   const params = useParams();
+
   const projectId = params.id as string;
 
   const [activeSection, setActiveSection] = useState("overview");
+
   const [project, setProject] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
 
+  const [loading, setLoading] = useState(true);
+
+  // 🔥 Fetch project
   useEffect(() => {
     if (!projectId) return;
 
-    const mockProject = {
-      id: projectId,
-      name: "AI Research Project",
-      domain: "AI / ML",
-      description: "This is a temporary mock project for UI development.",
-      status: "idle",
-      totalDocuments: 0,
-      totalChunks: 0,
-      totalPages: 0,
-      updatedAt: new Date().toISOString(),
+    const loadProject = async () => {
+      try {
+        setLoading(true);
+
+        const res = await axios.get(`/api/projects/${projectId}`);
+        const data = res.data;
+
+        setProject(data);
+        setDocuments(data.documents || []);
+        setJobs(data.ingestionJobs || []);
+        setChatMessages(data.chatMessages || []);
+      } catch (error) {
+        console.error("Failed to load project:", error);
+        setProject(null);
+      } finally {
+        setLoading(false);
+      }
     };
-    setProject(mockProject);
 
-    // async function loadProject() {
-    //   const res = await fetch(`/api/projects/${projectId}`);
-    //   if (!res.ok) {
-    //     setProject(null);
-    //     return;
-    //   }
-    //   const data = await res.json();
-    //   setProject(data);
-    // }
-
-    // loadProject();
+    loadProject();
   }, [projectId]);
+
+  // 🔥 Loading state (fixes flicker)
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">Loading project...</p>
+      </div>
+    );
+  }
+
+  // 🔥 Not found state (only AFTER loading)
+  if (!project) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <EmptyState
+          icon={FileText}
+          title="Project not found"
+          description="This project doesn't exist"
+        >
+          <Button onClick={() => router.push("/")}>Go Home</Button>
+        </EmptyState>
+      </div>
+    );
+  }
 
   const handleUpload = (files: File[]) => {
     toast.success(`${files.length} file(s) uploaded`);
@@ -95,27 +121,14 @@ export default function ProjectDashboard() {
   };
 
   const handleDeleteProject = async () => {
-    await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+    await axios.delete(`/api/projects/${projectId}`);
     toast.success("Project deleted");
     router.push("/");
   };
 
-  if (!project) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <EmptyState
-          icon={FileText}
-          title="Project not found"
-          description="This project doesn't exist"
-        >
-          <Button onClick={() => router.push("/")}>Go Home</Button>
-        </EmptyState>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex bg-background">
+      {/* Sidebar */}
       <aside className="w-56 border-r bg-card flex flex-col">
         <div className="p-4 border-b">
           <Button
@@ -159,6 +172,7 @@ export default function ProjectDashboard() {
         </nav>
       </aside>
 
+      {/* Main */}
       <div className="flex-1">
         <header className="border-b p-4 flex justify-between">
           <div>
@@ -168,22 +182,36 @@ export default function ProjectDashboard() {
             </p>
           </div>
 
-          <div className="flex gap-2">
-            <Button onClick={() => setActiveSection("upload")}>
-              <Upload className="h-4 w-4 mr-2" />
-              Upload
-            </Button>
-          </div>
+          <Button onClick={() => setActiveSection("upload")}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload
+          </Button>
         </header>
 
         <main className="p-6 max-w-4xl">
           {activeSection === "overview" && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatsCard title="Documents" value={0} icon={FileText} />
-                <StatsCard title="Chunks" value={0} icon={Layers} />
-                <StatsCard title="Pages" value={0} icon={FileUp} />
-                <StatsCard title="Updated" value={"-"} icon={Clock} />
+                <StatsCard
+                  title="Documents"
+                  value={documents.length}
+                  icon={FileText}
+                />
+                <StatsCard
+                  title="Chunks"
+                  value={project.totalChunks || 0}
+                  icon={Layers}
+                />
+                <StatsCard
+                  title="Pages"
+                  value={project.totalPages || 0}
+                  icon={FileUp}
+                />
+                <StatsCard
+                  title="Updated"
+                  value={project.updatedAt || "-"}
+                  icon={Clock}
+                />
               </div>
 
               <Card>
@@ -202,18 +230,16 @@ export default function ProjectDashboard() {
           )}
 
           {activeSection === "ingestion" && (
-            <div>
-              {jobs.length === 0 ? (
-                <EmptyState
-                  title="No jobs"
-                  description="No ingestion jobs yet"
-                />
-              ) : (
-                jobs.map((job) => (
-                  <IngestionStepper key={job.id} job={job} />
-                ))
-              )}
-            </div>
+            jobs.length === 0 ? (
+              <EmptyState
+                title="No jobs"
+                description="No ingestion jobs yet"
+              />
+            ) : (
+              jobs.map((job) => (
+                <IngestionStepper key={job.id} job={job} />
+              ))
+            )
           )}
 
           {activeSection === "documents" && (
@@ -233,15 +259,10 @@ export default function ProjectDashboard() {
           )}
 
           {activeSection === "settings" && (
-            <div className="space-y-4">
-              <Button
-                variant="destructive"
-                onClick={handleDeleteProject}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Project
-              </Button>
-            </div>
+            <Button variant="destructive" onClick={handleDeleteProject}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Project
+            </Button>
           )}
         </main>
       </div>
