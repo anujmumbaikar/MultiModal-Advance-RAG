@@ -2,7 +2,7 @@ import base64
 from openai import OpenAI
 from dotenv import load_dotenv
 from unstructured.documents.elements import Text,Element,FigureCaption,Image,Table,CompositeElement
-from unstructured.partition.pdf import partition_pdf
+from unstructured.partition.auto import partition
 load_dotenv()
 
 client = OpenAI()
@@ -23,6 +23,7 @@ def process_images_with_caption(raw_chunks,use_openai=True):
                 "caption": caption if caption else "No caption found",
                 "image_text": chunk.text,
                 "base64": chunk.metadata.image_base64,
+                "page_number": chunk.metadata.page_number,
                 "content":chunk.text,
                 "content_type": "image",
                 "filename": chunk.metadata.filename
@@ -64,7 +65,8 @@ def process_tables_with_description(raw_chunks,use_openai=True):
                 "table_text": element.text,
                 "content": element.text,
                 "content_type": "table",
-                "filename": element.metadata.filename
+                "filename": element.metadata.filename,
+                "page_number": element.metadata.page_number
             }
             if use_openai:
                 prompt = f"""
@@ -94,13 +96,15 @@ def process_text_chunks_from_raw(raw_chunks):
             processed_texts.append({
                 "content": chunk.text,
                 "content_type": "text",
-                "filename": chunk.metadata.filename
+                "filename": chunk.metadata.filename,
+                "page_number": chunk.metadata.page_number
+
             })
     return processed_texts
 
 
 def get_all_chunks(file_path):
-    raw_chunks = partition_pdf(
+    raw_chunks = partition(
         filename=file_path,
         strategy="hi_res",
         infer_table_structure=True,

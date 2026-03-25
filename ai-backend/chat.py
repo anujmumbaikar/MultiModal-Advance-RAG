@@ -13,7 +13,7 @@ embedding_model = OpenAIEmbeddings(
 
 if __name__ == "__main__":
     #step1:ingesting file to vector database
-    ingest_file_to_vector_db("./files/MT_RESEARCH_FINAL.pdf")
+    ingest_file_to_vector_db("./files/BERT.pdf")
 
     #step2:querying the vector database and generating response using LLM
     vector_db = QdrantVectorStore.from_existing_collection(
@@ -35,6 +35,7 @@ if __name__ == "__main__":
         Type: {res.metadata.get("type")}
         Filename: {res.metadata.get("filename")}
         Caption: {res.metadata.get("caption")}
+        Page Number:{res.metadata.get("page_number")}
 
         """
             for res in search_results
