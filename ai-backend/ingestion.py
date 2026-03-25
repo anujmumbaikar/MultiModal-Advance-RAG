@@ -22,7 +22,7 @@ def prepare_chunks_for_ingestion(chunks):
 
         processed_chunks.append({
             "content": chunk["content"],
-            "content_type": chunk.get("content_type", "text"),
+            "content_type": chunk.get("content_type", "unknown"),
             "page_number": chunk.get("page_number", None),
             "filename": chunk.get("filename", "unknown"),
             "caption": chunk.get("caption", None)

@@ -2,6 +2,7 @@ import base64
 from openai import OpenAI
 from dotenv import load_dotenv
 from unstructured.documents.elements import Text,Element,FigureCaption,Image,Table,CompositeElement
+from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 load_dotenv()
 
@@ -88,18 +89,23 @@ def process_tables_with_description(raw_chunks,use_openai=True):
             processed_tables.append(table_data)
     return processed_tables
 
-def process_text_chunks_from_raw(raw_chunks):
+def process_text_chunks(raw_chunks):
     processed_texts = []
 
-    for chunk in raw_chunks:
-        if isinstance(chunk, CompositeElement):
-            processed_texts.append({
-                "content": chunk.text,
-                "content_type": "text",
-                "filename": chunk.metadata.filename,
-                "page_number": chunk.metadata.page_number
-
-            })
+    chunks = chunk_by_title(
+        elements=[chunk for chunk in raw_chunks if isinstance(chunk, Text)],
+        new_after_n_chars=1500,
+        max_characters=2000,
+        combine_text_under_n_chars=500,
+    )
+    for chunk in chunks:
+        text_data = {
+            "content": chunk.text,
+            "content_type": "text",
+            "filename": chunk.metadata.filename,
+            "page_number": chunk.metadata.page_number
+        }
+        processed_texts.append(text_data)   
     return processed_texts
 
 
@@ -110,14 +116,9 @@ def get_all_chunks(file_path):
         infer_table_structure=True,
         extract_image_block_types=["figure", "table", "Image"],
         extract_image_block_to_payload=True,
-        chunking_strategy="by_title",
-        max_characters=2000,
-        combine_text_under_n_chars=500,
-        new_after_n_chars=1500
     )
-
     images = process_images_with_caption(raw_chunks)
     tables = process_tables_with_description(raw_chunks)
-    texts = process_text_chunks_from_raw(raw_chunks)
+    texts = process_text_chunks(raw_chunks)
 
     return images + tables + texts

@@ -13,7 +13,7 @@ embedding_model = OpenAIEmbeddings(
 
 if __name__ == "__main__":
     #step1:ingesting file to vector database
-    ingest_file_to_vector_db("./files/BERT.pdf")
+    ingest_file_to_vector_db("./files/OLAP_and_OLTP.pdf")
 
     #step2:querying the vector database and generating response using LLM
     vector_db = QdrantVectorStore.from_existing_collection(
