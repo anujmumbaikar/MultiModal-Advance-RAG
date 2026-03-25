@@ -38,8 +38,6 @@ export default function CreateProject() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  /* ---------------- VALIDATION ---------------- */
-
   const validateStep = () => {
     const e: Record<string, string> = {};
 
@@ -62,21 +60,27 @@ export default function CreateProject() {
 
   const back = () => setStep((s) => s - 1);
 
-  /* ---------------- SUBMIT ---------------- */
-
   const handleSubmit = async () => {
-    // 🔥 replace with real API later
-    console.log(form);
+    try {
+      const res = await fetch("/api/projects/new", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
 
-    toast.success("Project created successfully");
+      const data = await res.json();
 
-    // simulate backend id
-    const id = `proj_${Date.now()}`;
+      if (!res.ok) throw new Error(data.error);
 
-    router.push(`/projects/${id}`);
+      toast.success("Project created successfully");
+
+      router.push(`/projects/${data.project.id}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create project");
+    }
   };
-
-  /* ---------------- UI ---------------- */
 
   return (
     <div className="min-h-screen bg-background">
