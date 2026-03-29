@@ -1,4 +1,23 @@
 import { Document } from "@/types";
+
+const MIME_LABELS: Record<string, string> = {
+  "application/pdf": "PDF",
+  "text/plain": "TXT",
+  "text/csv": "CSV",
+  "text/html": "HTML",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+  "application/msword": "DOC",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+  "application/vnd.ms-excel": "XLS",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+  "application/vnd.ms-powerpoint": "PPT",
+};
+
+function formatFileType(mimeType: string): string {
+  if (MIME_LABELS[mimeType]) return MIME_LABELS[mimeType];
+  if (mimeType.startsWith("image/")) return mimeType.split("/")[1].toUpperCase();
+  return mimeType.split("/").pop()?.toUpperCase() ?? mimeType;
+}
 import {
   Table,
   TableBody,
@@ -52,8 +71,8 @@ export function DocumentTable({ documents, onDelete }: DocumentTableProps) {
                 {doc.name}
               </TableCell>
               <TableCell>
-                <span className="uppercase text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
-                  {doc.fileType}
+                <span className="text-xs font-semibold bg-muted px-1.5 py-0.5 rounded">
+                  {formatFileType(doc.fileType)}
                 </span>
               </TableCell>
               <TableCell className="text-muted-foreground">

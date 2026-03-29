@@ -1,6 +1,7 @@
-import { Check, Loader2, Circle, XCircle } from 'lucide-react';
+import { Check, Loader2, Circle, XCircle, Trash2 } from 'lucide-react';
 import { IngestionJob } from '@/types';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 const stageLabels: Record<string, string> = {
   upload_received: 'Upload Received',
@@ -10,12 +11,25 @@ const stageLabels: Record<string, string> = {
   ready: 'Ready for Query',
 };
 
-export function IngestionStepper({ job }: { job: IngestionJob }) {
+export function IngestionStepper({ job, onDelete }: { job: IngestionJob; onDelete?: (jobId: string) => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium">Pipeline Progress</h4>
-        <span className="text-sm text-muted-foreground">{job.progress}%</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">{job.progress}%</span>
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(job.id)}
+              title="Delete job"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
       <div className="w-full bg-secondary rounded-full h-2">
         <div

@@ -53,3 +53,17 @@ export async function PATCH(
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string; jobId: string }> }
+) {
+  try {
+    const { jobId } = await params;
+    await prisma.ingestionJob.delete({ where: { id: jobId } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("JOB_DELETE_ERROR:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}

@@ -139,6 +139,16 @@ export default function ProjectDashboard() {
     // Chat state is managed internally by ChatPanel
   };
 
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      await axios.delete(`/api/projects/${projectId}/jobs/${jobId}`);
+      setJobs((prev) => prev.filter((j) => j.id !== jobId));
+      toast.success("Ingestion job deleted");
+    } catch {
+      toast.error("Failed to delete job");
+    }
+  };
+
   const handleDeleteProject = async () => {
     await axios.delete(`/api/projects/${projectId}`);
     toast.success("Project deleted");
@@ -207,7 +217,7 @@ export default function ProjectDashboard() {
           </Button>
         </header>
 
-        <main className="p-6 max-w-4xl">
+        <main className={cn('p-6', activeSection !== 'chat' && 'max-w-4xl')}>
           {activeSection === "overview" && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -260,7 +270,7 @@ export default function ProjectDashboard() {
                 {jobs.map((job) => (
                   <Card key={job.id} className="border-border/50">
                     <CardContent className="p-5 space-y-5">
-                      <IngestionStepper job={job} />
+                      <IngestionStepper job={job} onDelete={handleDeleteJob} />
                       {job.logs?.length > 0 && <IngestionLogs logs={job.logs} />}
                     </CardContent>
                   </Card>
@@ -280,6 +290,7 @@ export default function ProjectDashboard() {
             <ChatPanel
               projectId={project.id}
               messages={chatMessages}
+              documents={documents}
               onSend={handleSendChat}
               onClear={() => setChatMessages([])}
             />

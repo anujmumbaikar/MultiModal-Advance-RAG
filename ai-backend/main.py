@@ -4,10 +4,12 @@ from langchain_qdrant import QdrantVectorStore
 from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
 import uuid
 import requests
+import glob as file_glob
 from fastapi.middleware.cors import CORSMiddleware
                                                                                  
 load_dotenv()
@@ -147,3 +149,25 @@ async def chat_endpoint(request: ChatRequest):
     return {
         "answer": response.choices[0].message.content
     }
+
+
+@app.get("/files/{project_id}/{document_name:path}")
+async def serve_document(project_id: str, document_name: str):
+    """Serve an uploaded document file for in-browser viewing."""
+    # Sanitize to prevent path traversal
+    project_id = os.path.basename(project_id)
+    document_name = os.path.basename(document_name)
+
+    project_dir = get_project_upload_dir(project_id)
+
+    # Files are stored as {uuid}_{original_filename}
+    matches = file_glob.glob(os.path.join(project_dir, f"*_{document_name}"))
+
+    if not matches:
+        # Fallback: exact filename match
+        exact = os.path.join(project_dir, document_name)
+        if os.path.exists(exact):
+            return FileResponse(exact, content_disposition_type="inline")
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(matches[0], content_disposition_type="inline")
