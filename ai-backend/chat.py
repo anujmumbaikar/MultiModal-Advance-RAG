@@ -13,13 +13,15 @@ embedding_model = OpenAIEmbeddings(
 
 if __name__ == "__main__":
     #step1:ingesting file to vector database
-    ingest_file_to_vector_db("./files/OLAP_and_OLTP.pdf")
+    project_id = "default"  # this is just for testing
+    ingest_file_to_vector_db("./files/OLAP_and_OLTP.pdf", project_id)
 
     #step2:querying the vector database and generating response using LLM
+    collection_name = f"project_{project_id}"
     vector_db = QdrantVectorStore.from_existing_collection(
         embedding=embedding_model,
         url="http://localhost:6333",
-        collection_name="multimodal_collection",
+        collection_name=collection_name,
     )
     while True:
         query = input(">> query: ")

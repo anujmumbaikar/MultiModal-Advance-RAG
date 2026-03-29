@@ -50,23 +50,29 @@ def convert_to_documents(chunks):
     return docs
 
 
-def store_in_qdrant(docs):
+def store_in_qdrant(docs, project_id: str):
+    collection_name = f"project_{project_id}"
     vector_store = QdrantVectorStore.from_documents(
         documents=docs,
         embedding=embedding_model,
         url="http://localhost:6333",
-        collection_name="multimodal_collection",
+        collection_name=collection_name,
     )
     return vector_store
 
 
-def ingest_file_to_vector_db(file_path):
+def ingest_file_to_vector_db(file_path, project_id: str = None):
+    if not project_id:
+        project_id = "default"
 
+    print(f"Starting ingestion for the document")
     chunks = get_all_chunks(file_path)
     processed_chunks = prepare_chunks_for_ingestion(chunks)
+    print(f"Prepared {len(processed_chunks)} chunks for ingestion into vector database")
     docs = convert_to_documents(processed_chunks)
 
-    store_in_qdrant(docs)
-    print(f"Ingestion completed for file: {file_path}")
+    print(f"Converted chunks to {len(docs)} documents for vector database ingestion")
+    store_in_qdrant(docs, project_id)
+    print(f"Ingestion completed for file: {file_path} into project_{project_id}")
 
     

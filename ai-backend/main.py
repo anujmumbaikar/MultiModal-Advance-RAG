@@ -3,7 +3,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from openai import OpenAI
 from dotenv import load_dotenv
-from fastapi import FastAPI , File, UploadFile, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 import os
 import uuid
@@ -18,40 +18,60 @@ embedding_model = OpenAIEmbeddings(
 
 class ChatRequest(BaseModel):
     query: str
+    project_id: str
 
-UPLOAD_DIR = "uploaded_files"
+class UploadRequest(BaseModel):
+    project_id: str
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploaded_files")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-vector_db = QdrantVectorStore.from_existing_collection(
-    embedding=embedding_model,
-    url="http://localhost:6333",
-    collection_name="multimodal_collection",
-)
+def get_project_upload_dir(project_id: str) -> str:
+    """Get upload directory for a specific project."""
+    project_dir = os.path.join(UPLOAD_DIR, project_id)
+    os.makedirs(project_dir, exist_ok=True)
+    return project_dir
+
+def get_vector_db_for_project(project_id: str) -> QdrantVectorStore:
+    """Get or create vector store for a specific project."""
+    collection_name = f"project_{project_id}"
+    return QdrantVectorStore.from_existing_collection(
+        embedding=embedding_model,
+        url="http://localhost:6333",
+        collection_name=collection_name,
+    )
 
 @app.post("/upload")
 async def upload_file(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    project_id: str = None
 ):
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+
     file_id = str(uuid.uuid4())
-    file_path = f"{UPLOAD_DIR}/{file_id}_{file.filename}"
+    project_upload_dir = get_project_upload_dir(project_id)
+    file_path = f"{project_upload_dir}/{file_id}_{file.filename}"
 
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    background_tasks.add_task(ingest_file_to_vector_db, file_path)
+    background_tasks.add_task(ingest_file_to_vector_db, file_path, project_id)
 
     return {
         "message": "File uploaded, processing started",
-        "file_id": file_id
+        "file_id": file_id,
+        "project_id": project_id
     }
 
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-
     query = request.query
+    project_id = request.project_id
 
+    vector_db = get_vector_db_for_project(project_id)
     search_results = vector_db.similarity_search(query, k=6)
 
     context = "\n\n\n".join([

@@ -34,10 +34,11 @@ def process_images_with_caption(raw_chunks,use_openai=True):
                 Generate and describe the image in detail. 
                 The caption of image is {image_data['caption']} and the image text is {image_data['image_text']}
                 Directly analyze the image and provide a detailed description without any additional text.
+                max characters should be 100-150 words.
 
                 """
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4.1",
                     messages=[
                         {
                             "role": "user",
@@ -75,9 +76,10 @@ def process_tables_with_description(raw_chunks,use_openai=True):
                     key data points , notable treands or insights 
                     The table is {table_data['table_as_html']}
                     Directly analyze the table and provide a detailed description without any additional text.
+                    max characters should be 100-150 words.
                     """
                 response = client.chat.completions.create(
-                        model="gpt-4o-mini",
+                        model="gpt-4.1",
                         messages=[
                             {
                                 "role": "user",
@@ -110,6 +112,7 @@ def process_text_chunks(raw_chunks):
 
 
 def get_all_chunks(file_path):
+    print(f"Extracting raw chunks from the document")
     raw_chunks = partition(
         filename=file_path,
         strategy="hi_res",
@@ -117,8 +120,14 @@ def get_all_chunks(file_path):
         extract_image_block_types=["figure", "table", "Image"],
         extract_image_block_to_payload=True,
     )
+    print(f"Image processing started")
     images = process_images_with_caption(raw_chunks)
+    print(f"Table processing started")
     tables = process_tables_with_description(raw_chunks)
+    print(f"Text processing started")
     texts = process_text_chunks(raw_chunks)
+    print(f"Processing completed for all chunk types")
+
+    print(f"Total {len(images)} images, {len(tables)} tables and {len(texts)} text chunks processed from the document")
 
     return images + tables + texts
