@@ -152,6 +152,7 @@ enum StageStatus {
   pending
   running
   completed
+  failed
 }
 
 enum ChatRole {

@@ -7,6 +7,7 @@ from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 import os
 import uuid
+import requests
 from fastapi.middleware.cors import CORSMiddleware
                                                                                  
 load_dotenv()
@@ -40,6 +41,21 @@ def get_project_upload_dir(project_id: str) -> str:
     os.makedirs(project_dir, exist_ok=True)
     return project_dir
 
+def create_ingestion_job(project_id: str, filename: str) -> str | None:
+    """Create an IngestionJob in Postgres via Next.js API and return its id."""
+    nextjs_url = os.getenv("NEXTJS_URL", "http://localhost:3000")
+    try:
+        res = requests.post(
+            f"{nextjs_url}/api/projects/{project_id}/jobs",
+            json={"filename": filename},
+            timeout=10,
+        )
+        return res.json().get("id")
+    except Exception as e:
+        print(f"Warning: failed to create ingestion job: {e}")
+        return None
+
+
 def get_vector_db_for_project(project_id: str) -> QdrantVectorStore:
     """Get or create vector store for a specific project."""
     collection_name = f"project_{project_id}"
@@ -69,12 +85,14 @@ async def upload_file(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    background_tasks.add_task(ingest_file_to_vector_db, file_path, project_id, file_size, file_type)
+    job_id = create_ingestion_job(project_id, file.filename or "unknown")
+    background_tasks.add_task(ingest_file_to_vector_db, file_path, project_id, file_size, file_type, job_id)
 
     return {
         "message": "File uploaded, processing started",
         "file_id": file_id,
-        "project_id": project_id
+        "project_id": project_id,
+        "job_id": job_id,
     }
 
 

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UploadDropzone } from "@/components/UploadDropzone";
-import { IngestionStepper } from "@/components/IngestionStepper";
+import { IngestionStepper, IngestionLogs } from "@/components/IngestionStepper";
 import { DocumentTable } from "@/components/DocumentTable";
 import { ChatPanel } from "@/components/ChatPanel";
 import { EmptyState } from "@/components/EmptyState";
@@ -83,6 +83,32 @@ export default function ProjectDashboard() {
     loadProject();
   }, [projectId]);
 
+  // 🔥 Poll ingestion jobs while on ingestion tab
+  useEffect(() => {
+    if (activeSection !== "ingestion" || !projectId) return;
+
+    let active = true;
+
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const res = await axios.get(`/api/projects/${projectId}/jobs`);
+        if (!active) return;
+        const updatedJobs = res.data;
+        setJobs(updatedJobs);
+        const allDone = updatedJobs.every((j: any) => j.progress >= 100);
+        if (!allDone) {
+          setTimeout(poll, 2000);
+        }
+      } catch {
+        if (active) setTimeout(poll, 3000);
+      }
+    };
+
+    poll();
+    return () => { active = false; };
+  }, [activeSection, projectId]);
+
   // 🔥 Loading state (fixes flicker)
   if (loading) {
     return (
@@ -107,8 +133,16 @@ export default function ProjectDashboard() {
     );
   }
 
-  const handleUpload = (files: File[]) => {
-    toast.success(`${files.length} file(s) uploaded`);
+  const handleUpload = async (files: File[]) => {
+    toast.success(`${files.length} file(s) uploaded — processing started`);
+    // Refresh jobs and navigate to ingestion tab
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/jobs`);
+      setJobs(res.data);
+    } catch {
+      // ignore, polling will catch it
+    }
+    setActiveSection("ingestion");
   };
 
   const handleDeleteDoc = (id: string) => {
@@ -232,13 +266,21 @@ export default function ProjectDashboard() {
           {activeSection === "ingestion" && (
             jobs.length === 0 ? (
               <EmptyState
-                title="No jobs"
-                description="No ingestion jobs yet"
+                icon={Activity}
+                title="No ingestion jobs"
+                description="Upload a document to start processing"
               />
             ) : (
-              jobs.map((job) => (
-                <IngestionStepper key={job.id} job={job} />
-              ))
+              <div className="space-y-6">
+                {jobs.map((job) => (
+                  <Card key={job.id} className="border-border/50">
+                    <CardContent className="p-5 space-y-5">
+                      <IngestionStepper job={job} />
+                      {job.logs?.length > 0 && <IngestionLogs logs={job.logs} />}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )
           )}
 
