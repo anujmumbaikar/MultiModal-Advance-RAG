@@ -200,7 +200,7 @@ function DocumentViewer({
             </div>
             <div>
               <p className="text-sm font-semibold">{mimeToLabel(selectedDoc.fileType)} files cannot be previewed</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-[220px] leading-relaxed">
+              <p className="text-xs text-muted-foreground mt-1 max-w-55 leading-relaxed">
                 Browser preview is not supported for this format. Download it to open locally.
               </p>
             </div>
@@ -298,25 +298,54 @@ export function ChatPanel({
         project_id: projectId,
       });
 
+      // Save both messages to database
+      const savedMessages = await axios.post(`/api/projects/${projectId}/chat`, {
+        query,
+        answer: res.data.answer,
+        citations: [], // TODO: extract citations from search results if needed
+      });
+
       const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: savedMessages.data.assistantMessage.id,
         projectId,
         role: 'assistant',
-        content: res.data.answer,
-        timestamp: new Date().toISOString(),
+        content: savedMessages.data.assistantMessage.content,
+        timestamp: savedMessages.data.assistantMessage.timestamp,
+        citations: savedMessages.data.assistantMessage.citations,
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch {
+      // Replace optimistic user message with saved one and add assistant message
+      setMessages(prev => {
+        const withoutOptimisticUser = prev.filter(m => m.id !== userMessage.id);
+        return [...withoutOptimisticUser,
+          {
+            id: savedMessages.data.userMessage.id,
+            role: 'user',
+            content: savedMessages.data.userMessage.content,
+            timestamp: savedMessages.data.userMessage.timestamp,
+            projectId,
+          },
+          assistantMessage
+        ];
+      });
+    } catch (error) {
       toast.error('Failed to get response. Please try again.');
+      // Remove optimistic user message on error
+      setMessages(prev => prev.filter(m => m.id !== userMessage.id));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClear = () => {
-    setMessages([]);
-    onClear();
+  const handleClear = async () => {
+    try {
+      await axios.delete(`/api/projects/${projectId}/chat`);
+      setMessages([]);
+      onClear();
+      toast.success('Chat history cleared');
+    } catch {
+      toast.error('Failed to clear chat history');
+    }
   };
 
   return (
