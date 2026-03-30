@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Eye, RefreshCw, Trash2, RotateCw } from "lucide-react";
 import { toast } from "sonner";
+import axios from "axios";
 
 interface DocumentTableProps {
   documents: Document[];
@@ -47,6 +48,20 @@ export function DocumentTable({ documents, onDelete }: DocumentTableProps) {
   const formatSize = (bytes: number) => {
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
+  };
+
+  const handleDelete = async (docId: string, docName: string) => {
+    if (!confirm(`Delete "${docName}"? This will remove it from the database and vector store.`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`/api/documents/${docId}`);
+      onDelete(docId);
+      toast.success("Document deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete document");
+    }
   };
 
   return (
@@ -86,6 +101,24 @@ export function DocumentTable({ documents, onDelete }: DocumentTableProps) {
               </TableCell>
               <TableCell className="text-right">{doc.pages || "—"}</TableCell>
               <TableCell className="text-right">{doc.chunks || "—"}</TableCell>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => handleDelete(doc.id, doc.name)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

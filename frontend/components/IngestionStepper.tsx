@@ -25,6 +25,7 @@ export function IngestionStepper({ job, onDelete }: { job: IngestionJob; onDelet
               className="h-6 w-6 text-muted-foreground hover:text-destructive"
               onClick={() => onDelete(job.id)}
               title="Delete job"
+              type="button"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>

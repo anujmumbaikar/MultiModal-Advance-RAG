@@ -1,6 +1,7 @@
 from ingestion import ingest_file_to_vector_db
 from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
 from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
@@ -33,6 +34,10 @@ class ChatRequest(BaseModel):
 
 class UploadRequest(BaseModel):
     project_id: str
+
+class DeleteDocumentRequest(BaseModel):
+    project_id: str
+    document_name: str
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploaded_files")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -171,3 +176,32 @@ async def serve_document(project_id: str, document_name: str):
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(matches[0], content_disposition_type="inline")
+
+
+@app.delete("/documents/{document_id}/delete")
+async def delete_document_from_vector_db(document_id: str, request: DeleteDocumentRequest):
+    """Delete document embeddings from Qdrant vector database."""
+    try:
+        from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+
+        collection_name = f"project_{request.project_id}"
+
+        client = QdrantClient(url="http://localhost:6333")
+
+        # Delete points where metadata.filename matches the document name
+        client.delete(
+            collection_name=collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="metadata.filename",
+                        match=MatchValue(value=request.document_name),
+                    )
+                ]
+            ),
+            wait=True,
+        )
+
+        return {"message": "Document embeddings deleted from vector DB", "document_id": document_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete from vector DB: {str(e)}")
