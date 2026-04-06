@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import axios from "axios";
 import { toast } from "sonner";
+import { FileUpload } from "@/components/ui/file-upload";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 

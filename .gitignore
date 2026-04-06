@@ -310,6 +310,7 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+frontend/.claude
 claude.txt
 ai-backend/uploaded_files/
 ai-backend/unstructured_output/
