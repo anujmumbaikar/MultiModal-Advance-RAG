@@ -2,6 +2,7 @@ import json
 import mimetypes
 import os
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -13,10 +14,12 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 load_dotenv()
 
 openai_client = OpenAI()
-unstructured = UnstructuredClient(api_key_auth=os.getenv("UNSTRUCTURED_API_KEY"))
+unstructured_client = UnstructuredClient(api_key_auth=os.getenv("UNSTRUCTURED_API_KEY"))
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unstructured_output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # Unstructured API limit: 20 MB
 
 TEXT_ELEMENT_TYPES = {
     "Title", "NarrativeText", "Text", "ListItem",
@@ -35,12 +38,19 @@ def partition_via_api(file_path: str) -> list[dict]:
     filename = os.path.basename(file_path)
     content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
 
+    file_size = os.path.getsize(file_path)
+    if file_size > MAX_FILE_SIZE_BYTES:
+        raise ValueError(
+            f"File '{filename}' is {file_size / (1024*1024):.1f} MB, "
+            f"which exceeds the Unstructured API limit of {MAX_FILE_SIZE_BYTES // (1024*1024)} MB."
+        )
+
     with open(file_path, "rb") as f:
         file_bytes = f.read()
 
     # --- Create job ---
     print(f"[Unstructured API] Creating job for: {filename}")
-    create_resp = unstructured.jobs.create_job(
+    create_resp = unstructured_client.jobs.create_job(
         request=CreateJobRequest(
             body_create_job=BodyCreateJob(
                 request_data=json.dumps({"template_id": "hi_res_and_enrichment"}),
@@ -61,7 +71,7 @@ def partition_via_api(file_path: str) -> list[dict]:
 
     # --- Poll until COMPLETED / FAILED ---
     while True:
-        poll_resp = unstructured.jobs.get_job(request={"job_id": job_id})
+        poll_resp = unstructured_client.jobs.get_job(request={"job_id": job_id})
         status = poll_resp.job_information.status
         print(f"[Unstructured API] Job status: {status}")
         if status in ("SCHEDULED", "IN_PROGRESS"):
@@ -76,7 +86,7 @@ def partition_via_api(file_path: str) -> list[dict]:
 
     all_elements: list[dict] = []
     for file_id in file_ids:
-        dl_resp = unstructured.jobs.download_job_output(
+        dl_resp = unstructured_client.jobs.download_job_output(
             request=DownloadJobOutputRequest(job_id=job_id, file_id=file_id)
         )
         elements = dl_resp.any if isinstance(dl_resp.any, list) else []
