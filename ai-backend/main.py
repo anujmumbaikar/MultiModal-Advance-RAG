@@ -1,7 +1,7 @@
 from ingestion import ingest_file_to_vector_db
-from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore, RetrievalMode, FastEmbedSparse
+from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
+from embeddings import embedding_model, sparse_embeddings
 from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
@@ -27,11 +27,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-embedding_model = OpenAIEmbeddings(
-    model="text-embedding-3-large"
-)
-sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
 
 class ChatRequest(BaseModel):
     query: str

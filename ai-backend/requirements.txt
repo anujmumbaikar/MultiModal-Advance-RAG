@@ -50,7 +50,7 @@ numpy==2.0.2
 openai==2.31.0
 orjson==3.11.5
 packaging==25.0
-pillow==11.3.0
+pillow==10.4.0
 portalocker==3.2.0
 protobuf==6.33.6
 pycparser==2.23
