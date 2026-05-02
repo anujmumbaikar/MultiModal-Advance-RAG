@@ -2,21 +2,21 @@ from ingestion import ingest_file_to_vector_db
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
 from embeddings import embedding_model, sparse_embeddings
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import asyncio
 import json
 import os
 import uuid
 import requests
 import glob as file_glob
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+from typing import Optional, Literal
 
 load_dotenv()
-client = OpenAI()
 async_client = AsyncOpenAI()
 
 QDRANT_URL = "https://9219ef2c-5862-409f-93ef-f0808298aad3.eu-west-2-0.aws.cloud.qdrant.io"
@@ -31,13 +31,13 @@ app.add_middleware(
 )
 
 class Message(BaseModel):
-    role: str
+    role: Literal["user", "assistant", "system"]
     content: str
 
 class ChatRequest(BaseModel):
     query: str
     project_id: str
-    messages: list[Message] = []
+    messages: list[Message] = Field(default=[], max_length=50)
 
 class UploadRequest(BaseModel):
     project_id: str
@@ -126,7 +126,9 @@ async def chat_endpoint(request: ChatRequest):
     project_id = request.project_id
 
     vector_db = get_vector_db_for_project(project_id)
-    search_results = vector_db.similarity_search(query, k=6)
+    search_results = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vector_db.similarity_search(query, k=6)
+    )
 
     context = "\n\n\n".join([
         f"""
