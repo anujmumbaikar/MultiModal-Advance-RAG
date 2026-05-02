@@ -50,6 +50,7 @@ export interface ChatMessage {
   citations?: Citation[];
   timestamp: string;
   isStreaming?: boolean;
+  _stableKey?: string;
 }
 
 export interface Citation {

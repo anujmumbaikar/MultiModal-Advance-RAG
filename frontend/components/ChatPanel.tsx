@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage, Citation, Document } from '@/types';
@@ -64,6 +65,21 @@ function mimeToLabel(fileType: string): string {
   return fileType.split('/').pop()?.toUpperCase() ?? 'FILE';
 }
 
+function StreamingDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-1 align-middle">
+      {[0, 1, 2].map(i => (
+        <motion.span
+          key={i}
+          className="inline-block w-1 h-1 rounded-full bg-primary/60"
+          animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function SourcesPanel({ citations }: { citations: Citation[] }) {
   const [open, setOpen] = useState(true);
   return (
@@ -81,10 +97,7 @@ function SourcesPanel({ citations }: { citations: Citation[] }) {
           <FileText className="h-3.5 w-3.5" />
           {citations.length} source{citations.length > 1 ? 's' : ''}
         </span>
-        <motion.div
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
+        <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
           <PanelRight className="h-3.5 w-3.5" />
         </motion.div>
       </button>
@@ -164,7 +177,6 @@ function DocumentViewer({
 
   return (
     <div className="flex flex-col h-full bg-card">
-      {/* Doc panel header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
         <h3 className="text-sm font-medium flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
@@ -179,7 +191,6 @@ function DocumentViewer({
         </button>
       </div>
 
-      {/* Document list */}
       <div className="border-b border-border/50">
         <div className="p-2 space-y-1 max-h-44 overflow-y-auto scrollbar-thin">
           {documents.map((doc) => {
@@ -219,7 +230,6 @@ function DocumentViewer({
         </div>
       </div>
 
-      {/* Viewer area */}
       <div className="flex-1 overflow-hidden bg-muted/20">
         {!selectedDoc ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -270,11 +280,7 @@ function DocumentViewer({
             />
           </div>
         ) : (
-          <iframe
-            src={docUrl!}
-            className="w-full h-full"
-            title={selectedDoc.name}
-          />
+          <iframe src={docUrl!} className="w-full h-full" title={selectedDoc.name} />
         )}
       </div>
 
@@ -295,6 +301,7 @@ function DocumentViewer({
   );
 }
 
+
 export function ChatPanel({
   projectId,
   messages: initialMessages,
@@ -302,17 +309,23 @@ export function ChatPanel({
   onSend,
   onClear,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    initialMessages.map(m => ({ ...m, _stableKey: m.id }))
+  );
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showDocViewer, setShowDocViewer] = useState(documents.length > 0);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(documents[0] ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isNearBottom || isLoading) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, isLoading]);
 
   useEffect(() => {
     if (documents.length > 0 && !showDocViewer) {
@@ -325,13 +338,17 @@ export function ChatPanel({
     return () => { abortRef.current?.abort(); };
   }, []);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (!input.trim() || isLoading) return;
     const query = input.trim();
     setInput('');
 
+    const userStableKey = crypto.randomUUID();
+    const assistantStableKey = crypto.randomUUID();
+
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
+      _stableKey: userStableKey,
       projectId,
       role: 'user',
       content: query,
@@ -340,6 +357,7 @@ export function ChatPanel({
 
     const streamingMessage: ChatMessage = {
       id: 'streaming',
+      _stableKey: assistantStableKey,
       projectId,
       role: 'assistant',
       content: '',
@@ -385,7 +403,7 @@ export function ChatPanel({
             if (parsed.token) {
               fullContent += parsed.token;
               setMessages(prev =>
-                prev.map(m => m.id === 'streaming' ? { ...m, content: fullContent } : m)
+                prev.map(m => m._stableKey === assistantStableKey ? { ...m, content: fullContent } : m)
               );
             }
           } catch (e) {
@@ -396,7 +414,7 @@ export function ChatPanel({
       }
 
       if (!fullContent.trim()) {
-        setMessages(prev => prev.filter(m => m.id !== 'streaming' && m.id !== userMessage.id));
+        setMessages(prev => prev.filter(m => m._stableKey !== assistantStableKey && m._stableKey !== userStableKey));
         throw new Error('No content received from stream');
       }
 
@@ -406,35 +424,35 @@ export function ChatPanel({
         citations: [],
       });
 
-      setMessages(prev => {
-        const clean = prev.filter(m => m.id !== 'streaming' && m.id !== userMessage.id);
-        return [
-          ...clean,
-          {
+      // Update in-place using stable keys — no exit/enter animations triggered
+      setMessages(prev => prev.map(m => {
+        if (m._stableKey === userStableKey) {
+          return {
+            ...m,
             id: savedMessages.data.userMessage.id,
-            role: 'user' as const,
-            content: savedMessages.data.userMessage.content,
             timestamp: savedMessages.data.userMessage.timestamp,
-            projectId,
-          },
-          {
+          };
+        }
+        if (m._stableKey === assistantStableKey) {
+          return {
+            ...m,
             id: savedMessages.data.assistantMessage.id,
-            role: 'assistant' as const,
             content: savedMessages.data.assistantMessage.content,
             timestamp: savedMessages.data.assistantMessage.timestamp,
-            projectId,
+            isStreaming: false,
             citations: savedMessages.data.assistantMessage.citations,
-          },
-        ];
-      });
+          };
+        }
+        return m;
+      }));
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       toast.error('Failed to get response. Please try again.');
-      setMessages(prev => prev.filter(m => m.id !== userMessage.id && m.id !== 'streaming'));
+      setMessages(prev => prev.filter(m => m._stableKey !== userStableKey && m._stableKey !== assistantStableKey));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [input, isLoading, messages, projectId, onSend]);
 
   const handleClear = async () => {
     try {
@@ -444,6 +462,13 @@ export function ChatPanel({
       toast.success('Chat history cleared');
     } catch {
       toast.error('Failed to clear chat history');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
@@ -468,7 +493,12 @@ export function ChatPanel({
               </motion.div>
               <div>
                 <h3 className="text-sm font-semibold">AI Assistant</h3>
-                <p className="text-[10px] text-muted-foreground">Grounded in your documents</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                  <p className="text-[10px] text-muted-foreground">
+                    {isLoading ? 'Thinking…' : 'Grounded in your documents'}
+                  </p>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -480,12 +510,7 @@ export function ChatPanel({
                   onClick={() => setShowDocViewer(v => !v)}
                   title={showDocViewer ? 'Hide document viewer' : 'Show document viewer'}
                 >
-                  <motion.div
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                  >
-                    {showDocViewer ? <PanelRightClose className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
-                  </motion.div>
+                  {showDocViewer ? <PanelRightClose className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
                 </Button>
               )}
               <Button
@@ -493,6 +518,7 @@ export function ChatPanel({
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
                 onClick={handleClear}
+                disabled={isLoading || messages.length === 0}
                 title="Clear chat"
               >
                 <Trash2 className="h-4 w-4" />
@@ -501,7 +527,7 @@ export function ChatPanel({
           </div>
 
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
             {messages.length === 0 && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -512,7 +538,7 @@ export function ChatPanel({
                   <motion.div
                     initial={{ scale: 0, rotate: -180 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                    transition={{ type: 'spring', stiffness: 200, damping: 15 }}
                     className="h-16 w-16 rounded-2xl bg-linear-to-br from-primary/20 to-primary/5 flex items-center justify-center shadow-lg"
                   >
                     <Bot className="h-8 w-8 text-primary" />
@@ -551,72 +577,72 @@ export function ChatPanel({
               </motion.div>
             )}
 
-            <AnimatePresence>
-              {messages.map((msg, idx) => (
+            <AnimatePresence initial={false}>
+              {messages.map((msg) => (
                 <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3 }}
+                  key={msg._stableKey ?? msg.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
                   className={cn('flex gap-3 group', msg.role === 'user' ? 'justify-end' : 'justify-start')}
                 >
                   {msg.role === 'assistant' && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="h-8 w-8 rounded-lg bg-linear-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 mt-0.5 shadow-sm"
-                    >
+                    <div className="h-8 w-8 rounded-lg bg-linear-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 mt-1 shadow-sm">
                       <Bot className="h-4 w-4 text-primary" />
-                    </motion.div>
+                    </div>
                   )}
 
-                  <motion.div
-                    initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={cn('max-w-[80%] space-y-1', msg.role === 'user' ? 'items-end' : 'items-start')}
-                  >
+                  <div className={cn('max-w-[80%] flex flex-col', msg.role === 'user' ? 'items-end' : 'items-start')}>
                     <div className={cn(
-                      'rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm border',
+                      'rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm',
                       msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground rounded-tr-md border-primary/20'
-                        : 'bg-secondary/40 rounded-tl-md border-border/40'
+                        ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                        : 'bg-secondary/40 border border-border/40 rounded-tl-sm'
                     )}>
                       {msg.role === 'assistant' ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_h4]:text-sm [&_h5]:text-sm [&_h6]:text-sm [&_p]:text-sm [&_ul]:text-sm [&_ol]:text-sm [&_li]:text-sm [&_strong]:text-sm [&_em]:text-sm [&_code]:text-sm [&_pre]:text-sm">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.content}
-                          </ReactMarkdown>
+                        <div className="prose prose-sm dark:prose-invert max-w-none [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_ul]:text-sm [&_ol]:text-sm [&_li]:text-sm [&_code]:text-xs [&_pre]:text-xs">
+                          {msg.content ? (
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          ) : null}
                           {msg.isStreaming && (
-                            <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse align-middle" />
+                            msg.content ? <StreamingDots /> : (
+                              <span className="text-muted-foreground text-xs italic flex items-center gap-1">
+                                Thinking <StreamingDots />
+                              </span>
+                            )
                           )}
                         </div>
                       ) : (
                         <div className="whitespace-pre-wrap">{msg.content}</div>
                       )}
-                      {msg.role === 'assistant' && <MessageActions content={msg.content} />}
-                      {msg.citations && msg.citations.length > 0 && (
-                        <SourcesPanel citations={msg.citations} />
-                      )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                    {msg.role === 'assistant' && !msg.isStreaming && (
+                      <MessageActions content={msg.content} />
+                    )}
+
+                    {msg.citations && msg.citations.length > 0 && (
+                      <div className="w-full">
+                        <SourcesPanel citations={msg.citations} />
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-muted-foreground px-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
-                  </motion.div>
+                  </div>
 
                   {msg.role === 'user' && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"
-                    >
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-1">
                       <User className="h-4 w-4 text-primary" />
-                    </motion.div>
+                    </div>
                   )}
                 </motion.div>
               ))}
             </AnimatePresence>
-
           </div>
 
           {/* Input */}
@@ -626,24 +652,17 @@ export function ChatPanel({
                 <Input
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  placeholder="Ask a question about your documents..."
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask a question about your documents…"
+                  disabled={isLoading}
                   className="h-12 pr-4 rounded-xl bg-secondary/30 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/30 text-sm"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
                 />
               </div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
-                  className="h-12 w-12 rounded-xl shadow-lg"
+                  className="h-12 w-12 rounded-xl shadow-lg shrink-0"
                   size="icon"
                 >
                   <Send className="h-4 w-4" />
@@ -651,7 +670,7 @@ export function ChatPanel({
               </motion.div>
             </div>
             <p className="text-[10px] text-muted-foreground mt-2 text-center">
-              Press Enter to send · Shift+Enter for new line
+              Enter to send · Shift+Enter for new line
             </p>
           </div>
         </ResizablePanel>
